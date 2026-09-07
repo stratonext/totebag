@@ -20,7 +20,7 @@ jobs:
     outputs:
       prerelease: ${{ steps.meta.outputs.prerelease }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install uv
         uses: astral-sh/setup-uv@v6
         with:
@@ -103,7 +103,7 @@ jobs:
     permissions:
       contents: write # create the release and attach the built distributions
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Download distributions
         uses: actions/download-artifact@v4
         with:
