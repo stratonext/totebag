@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+
+version: '3'
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+    silent: true
+
+  install:
+    desc: Install the package and dev dependencies
+    cmds:
+      - uv sync
+
+  compile:
+    desc: Byte-compile the sources (fast syntax check)
+    cmds:
+      - uv run python -m compileall -q totebag tests
+
+  build:
+    desc: Build the sdist and wheel into dist/
+    cmds:
+      - uv build
+
+  run:
+    desc: 'Run the totebag CLI (pass args after --, e.g. `task run -- project list`)'
+    cmds:
+      - uv run totebag {{.CLI_ARGS}}
+
+  test:
+    desc: Run the test suite
+    cmds:
+      - uv run pytest -q
+
+  lint:
+    desc: Lint with ruff
+    cmds:
+      - uvx ruff check . --fix

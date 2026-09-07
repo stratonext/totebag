@@ -1,0 +1,57 @@
+[project]
+name = "totebag"
+version = "0.1.0"
+description = "Portable, vendor-neutral project-knowledge store any AI Agent agent can restore over a CLI."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "StratoNext, Inc" }]
+keywords = ["llm", "agents", "memory", "context", "knowledge", "cli", "mcp-alternative"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Utilities",
+]
+# Add [project.urls] (Homepage, Repository, Issues) once the public repository URL is set.
+dependencies = [
+    "typer>=0.12",
+    "pydantic>=2.6",
+    "pyyaml>=6",
+    "python-frontmatter>=1.1",
+    "fsspec>=2024.6",
+]
+
+[project.optional-dependencies]
+s3 = ["s3fs>=2024.6"]
+gcs = ["gcsfs>=2024.6"]
+
+[project.scripts]
+totebag = "totebag.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["totebag"]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.ruff]
+line-length = 110
+
+[tool.ruff.lint]
+# Defaults (pyflakes + a subset of pycodestyle) plus import sorting, bugbear, and pyupgrade.
+select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.flake8-bugbear]
+# Typer/Click declare CLI options as argument defaults; these calls are safe there (not B008).
+extend-immutable-calls = ["typer.Option", "typer.Argument"]

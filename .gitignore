@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.totebag/
+_AGENT/
+.skills/
+.claude/
+.ruff_cache/
