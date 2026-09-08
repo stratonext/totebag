@@ -99,7 +99,7 @@ protection so these checks are required before merge.
 Releases are driven by version tags via `.github/workflows/release.yml`:
 
 - **`vX.Y.Z`** → publishes to [PyPI](https://pypi.org/project/totebag/).
-- **`vX.Y.Z-pre*`** (e.g. `v0.2.0-pre`, `v0.2.0-pre.1`) → publishes to
+- **Pre-release tags** (PEP 440 `rc`/`a`/`b`, e.g. `v0.2.0rc1`, `v0.2.0a1`) → publish to
   [TestPyPI](https://test.pypi.org/project/totebag/) so a build can be validated before a final tag.
 
 To cut a release:
