@@ -7,18 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-
-- **Unified docs, tools/skills, and files into one `Asset` concept** (breaking on-disk format).
-  Documents and tools are now `Asset`s distinguished by `AssetCategory`; `Doc`, `Tool`, and
-  `ToolKind` are removed. A tool/skill is just a byte asset (an optional uploaded file), stored
-  under `assets/` like any other; `tool` becomes a filtered view over assets with `tool get`,
-  `tool list`, and `tool download`, while `tool add` takes an optional file. Only documents keep a
-  distinct on-disk shape (editable text under `docs/`, OKF `type: document`). Tools leave the inline
-  `project.md` array. No migration for pre-`0.1.0` stores. See
-  [ADR-004](docs/architecture/decisions/ADR-004-unify-asset-concept.md).
-
-## [0.1.0] - 2026-09-07
+## [0.1.0] - 2026-09-08
 
 Initial release.
 
@@ -31,7 +20,15 @@ Initial release.
   extras. The same OKF tree round-trips across all three.
 - Default on-disk format: an Open Knowledge Format (OKF) v0.2 bundle of markdown-with-front-matter
   files; git-diffable and editor-readable. Store config in `config.yaml`.
-- Workspaces and projects, with per-item types: docs, notes, links, lists, assets, tools, and tasks.
+- Workspaces and projects. A project holds notes, links, lists, tasks, and **assets** - one unified
+  item covering documents (editable markdown), tools/skills (optionally file-backed), and arbitrary
+  files, distinguished by category; `doc`/`tool` are focused views over it. See
+  [ADR-004](docs/architecture/decisions/ADR-004-unify-asset-concept.md).
+- Tasks: deferred future work, each in its own folder, with attachments you can add (`task attach`),
+  inspect (`task get`), and pull back out (`task download`).
+- Terse human output with color at a TTY and machine-readable JSON in agent mode
+  (`TOTEBAG_AGENT_MODE` / `--json`); `doc get` and `project context` render markdown. Destructive
+  commands use a consistent `delete` verb and require `--confirm`.
 - The description rule: stored content must carry a caller-written description or it is rejected.
 - Progressive discovery: `get --brief` (and `--recursive`) return id + description without full
   content; `project context` assembles the full restore blob for an agent.
