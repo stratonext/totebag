@@ -99,7 +99,7 @@ protection so these checks are required before merge.
 Releases are driven by version tags via `.github/workflows/release.yml`:
 
 - **`vX.Y.Z`** → publishes to [PyPI](https://pypi.org/project/totebag/).
-- **`vX.Y.Z-pre*`** (e.g. `v0.2.0-pre`, `v0.2.0-pre.1`) → publishes to
+- **Pre-release tags** (PEP 440 `rc`/`a`/`b`, e.g. `v0.2.0rc1`, `v0.2.0a1`) → publish to
   [TestPyPI](https://test.pypi.org/project/totebag/) so a build can be validated before a final tag.
 
 To cut a release:
@@ -118,6 +118,28 @@ The workflow verifies the tag matches the package version, builds and metadata-c
 distributions, publishes them to the right index, and creates a GitHub Release whose notes are the
 matching `CHANGELOG.md` section (falling back to auto-generated notes if none is found). Pre-release
 tags are marked as pre-releases on GitHub.
+
+### Verify a TestPyPI build
+
+TestPyPI hosts only `totebag`, not its dependencies (`fsspec`, `pydantic`, ...), so the install
+must fall through to real PyPI for those. Because a few deps also exist on TestPyPI, uv needs
+`--index-strategy unsafe-best-match` to pick the newest version across indexes:
+
+```bash
+uv tool install \
+  --index https://test.pypi.org/simple/ \
+  --index https://pypi.org/simple/ \
+  --index-strategy unsafe-best-match \
+  totebag --prerelease=allow
+totebag --version   # should print the rc you published
+```
+
+pip/pipx equivalent:
+
+```bash
+pipx install --pip-args="--index-url https://test.pypi.org/simple/ \
+  --extra-index-url https://pypi.org/simple/ --pre" totebag
+```
 
 **One-time setup** (repository maintainer) — the workflow authenticates over OIDC, so no API tokens
 are stored:
