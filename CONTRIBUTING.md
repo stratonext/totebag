@@ -98,12 +98,15 @@ protection so these checks are required before merge.
 
 Releases are driven by version tags via `.github/workflows/release.yml`:
 
-- **`vX.Y.Z`** → publishes to [PyPI](https://pypi.org/project/totebag/), **only if the tagged commit
-  is merged into `main`** (the workflow fails otherwise). So a production release always ships from
-  reviewed, merged code — merge the release PR first, then tag `main`.
+Every tag — pre-release or final — **must point at a commit merged into `main`**, or the release
+build fails; nothing publishes from a branch/PR tag. Merge the release PR first, then tag `main`.
+
+- **`vX.Y.Z`** → publishes to [PyPI](https://pypi.org/project/totebag/).
 - **Pre-release tags** (PEP 440 `rc`/`a`/`b`, e.g. `v0.2.0rc1`, `v0.2.0a1`) → publish to
   [TestPyPI](https://test.pypi.org/project/totebag/) so a build can be validated before a final tag.
-  These may be tagged on a branch (no main requirement), so you can validate a build before merging.
+
+Both publishes also pause for a manual approval on their GitHub Environment (`pypi` / `testpypi`)
+before uploading.
 
 To cut a release:
 
@@ -120,7 +123,7 @@ To cut a release:
    git push origin v0.1.0
    ```
 
-The workflow verifies the tag matches the package version, requires a final tag to be on `main`,
+The workflow verifies the tag matches the package version, requires the tag to be on `main`,
 builds and metadata-checks the distributions, publishes them to the right index, and creates a GitHub
 Release whose notes are the matching `CHANGELOG.md` section (falling back to auto-generated notes if
 none is found). Pre-release tags are marked as pre-releases on GitHub.
