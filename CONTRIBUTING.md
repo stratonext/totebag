@@ -98,26 +98,35 @@ protection so these checks are required before merge.
 
 Releases are driven by version tags via `.github/workflows/release.yml`:
 
+Every tag — pre-release or final — **must point at a commit merged into `main`**, or the release
+build fails; nothing publishes from a branch/PR tag. Merge the release PR first, then tag `main`.
+
 - **`vX.Y.Z`** → publishes to [PyPI](https://pypi.org/project/totebag/).
 - **Pre-release tags** (PEP 440 `rc`/`a`/`b`, e.g. `v0.2.0rc1`, `v0.2.0a1`) → publish to
   [TestPyPI](https://test.pypi.org/project/totebag/) so a build can be validated before a final tag.
+
+Both publishes also pause for a manual approval on their GitHub Environment (`pypi` / `testpypi`)
+before uploading.
 
 To cut a release:
 
 1. Update `CHANGELOG.md`: move items from `## [Unreleased]` into a new `## [X.Y.Z] - YYYY-MM-DD`
    section.
-2. Bump `version` in `pyproject.toml` (semantic versioning) and land both on `main`.
-3. Tag the commit and push the tag — the tag must match the `pyproject.toml` version:
+2. Bump `version` in `pyproject.toml` (semantic versioning). Open a PR and **merge it to `main`**
+   (`main` is protected: PR review + CI required).
+3. **Tag the merged commit on `main`** and push the tag — the tag must match the `pyproject.toml`
+   version:
 
    ```bash
+   git checkout main && git pull
    git tag v0.1.0
    git push origin v0.1.0
    ```
 
-The workflow verifies the tag matches the package version, builds and metadata-checks the
-distributions, publishes them to the right index, and creates a GitHub Release whose notes are the
-matching `CHANGELOG.md` section (falling back to auto-generated notes if none is found). Pre-release
-tags are marked as pre-releases on GitHub.
+The workflow verifies the tag matches the package version, requires the tag to be on `main`,
+builds and metadata-checks the distributions, publishes them to the right index, and creates a GitHub
+Release whose notes are the matching `CHANGELOG.md` section (falling back to auto-generated notes if
+none is found). Pre-release tags are marked as pre-releases on GitHub.
 
 ### Verify a TestPyPI build
 
