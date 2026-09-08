@@ -47,7 +47,7 @@ is not warranted.
 | Add | Add a note to a project. |
 | Get | Retrieve a note. |
 | List | List a project's notes. |
-| Remove | Remove a note from a project. |
+| Delete | Delete a note from a project. |
 
 ## 4. Links
 
@@ -56,17 +56,24 @@ is not warranted.
 | Add | Add a link to a project. |
 | Get | Retrieve a link. |
 | List | List a project's links. |
-| Remove | Remove a link from a project. |
+| Delete | Delete a link from a project. |
 
-## 5. Documents
+## 5. Assets
+
+An asset is any stored item, distinguished by a **category**: a `document` (editable markdown), a
+byte file (`binary`, `generic`, `transcript`), or a `tool`/`skill` (a dependency, with an optional
+uploaded file). A document keeps its text in the item (`body`); every other category is a byte asset
+that may carry a file. One operation set covers all categories; the `tool` and `doc` command groups
+are filtered views over it.
 
 | Operation | Description |
 |---|---|
-| Add | Add a document. |
-| Get | Retrieve a document. |
-| List | List a project's documents. |
-| Update | Update a document. |
-| Remove | Remove a document. |
+| Add | Add an asset of any category (with its content and required description). |
+| Get | Retrieve an asset (metadata plus `body` for documents). |
+| List | List a project's assets (optionally filtered by category). |
+| Update | Update an asset's fields or content. |
+| Read Bytes | Read a byte asset's bytes. |
+| Delete | Delete an asset. |
 
 ## 6. Lists
 
@@ -79,27 +86,11 @@ fields; the caller keeps keys consistent. Entries are added in batches, never on
 | Get | Retrieve a list and its entries. |
 | List | List a project's lists. |
 | Add Entries | Append a batch of one or more entries to a list. |
-| Remove Entry | Remove a single entry from a list by its position. |
+| Delete Entry | Delete a single entry from a list by its position. |
 | Export | Return the list's entries as CSV. |
-| Remove | Remove a list. |
+| Delete | Delete a list. |
 
-## 7. Assets
-
-| Operation | Description |
-|---|---|
-| Add | Add an asset (a binary plus its summary). |
-| Read | Read an asset's bytes. |
-| Remove | Remove an asset. |
-
-## 8. Tools
-
-| Operation | Description |
-|---|---|
-| Add | Add a tool, including how to restore it. |
-| Get | Retrieve a tool. |
-| Remove | Remove a tool. |
-
-## 9. Tasks
+## 7. Tasks
 
 A task is a deferred piece of work to pick up later - future/postponed work, not a tracker for
 work in progress. A task SHOULD be removed once completed, though this is not mandatory.
@@ -110,15 +101,15 @@ work in progress. A task SHOULD be removed once completed, though this is not ma
 | Get | Retrieve a task. |
 | List | List a project's tasks. |
 | Attach | Attach an asset to a task. |
-| Remove | Remove a task. |
+| Delete | Delete a task. |
 
-## 10. Search
+## 8. Search
 
 | Operation | Description |
 |---|---|
 | Search | Search stored content across a project or a whole workspace. |
 
-## 11. Configuration
+## 9. Configuration
 
 | Operation | Description |
 |---|---|

@@ -5,6 +5,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Unified docs, tools/skills, and files into one `Asset` concept** (breaking on-disk format).
+  Documents and tools are now `Asset`s distinguished by `AssetCategory`; `Doc`, `Tool`, and
+  `ToolKind` are removed. A tool/skill is just a byte asset (an optional uploaded file), stored
+  under `assets/` like any other; `tool` becomes a filtered view over assets with `tool get`,
+  `tool list`, and `tool download`, while `tool add` takes an optional file. Only documents keep a
+  distinct on-disk shape (editable text under `docs/`, OKF `type: document`). Tools leave the inline
+  `project.md` array. No migration for pre-`0.1.0` stores. See
+  [ADR-004](docs/architecture/decisions/ADR-004-unify-asset-concept.md).
+
 ## [0.1.0] - 2026-09-07
 
 Initial release.

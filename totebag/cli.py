@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 from importlib import resources
 from typing import Any
@@ -17,7 +18,7 @@ import typer
 
 from . import __version__
 from .context import build_context
-from .models import AssetCategory, LinkType, ProjectStatus, ProjectType, ToolKind
+from .models import BYTES_CATEGORIES, TOOL_CATEGORIES, AssetCategory, LinkType, ProjectStatus, ProjectType
 from .store import ProjectNotFound, Store, WorkspaceNotFound, entries_to_csv
 
 
@@ -140,13 +141,14 @@ def _print_obj(data: dict, indent: int = 0) -> None:
     for key, val in data.items():
         if val is None or val == "" or val == [] or val == {}:
             continue
+        label = _color(str(key), fg="cyan")
         if isinstance(val, dict):
-            typer.echo(f"{pad}{key}:")
+            typer.echo(f"{pad}{label}:")
             _print_obj(val, indent + 1)
         elif isinstance(val, list):
-            typer.echo(f"{pad}{key}: {len(val)} item(s)")
+            typer.echo(f"{pad}{label}: {len(val)} item(s)")
         else:
-            typer.echo(f"{pad}{key}: {val}")
+            typer.echo(f"{pad}{label}: {val}")
 
 
 _CHILD_KINDS = ("projects", "notes", "links", "docs", "lists", "assets", "tools", "tasks")
@@ -157,16 +159,48 @@ def _is_human_tty() -> bool:
     return sys.stdout.isatty() and not _OUT.json
 
 
+def _term_width(default: int = 100) -> int:
+    return shutil.get_terminal_size((default, 24)).columns
+
+
+def _truncate(text: str, width: int) -> str:
+    """One-line, whitespace-collapsed, ellipsized to `width` (for long free-text in list rows)."""
+    text = " ".join(text.split())
+    return text if len(text) <= width else text[: max(1, width - 1)].rstrip() + "…"
+
+
+def _color(text: str, fg: str | None = None, bold: bool = False, dim: bool = False) -> str:
+    """Style for a human at a terminal; a no-op in agent/JSON/piped mode so output stays plain."""
+    if not _is_human_tty():
+        return text
+    return typer.style(text, fg=fg, bold=bold, dim=dim)
+
+
+def _render_markdown(text: str) -> None:
+    """Render markdown for a human (styled headers, real code blocks, emphasis). Falls back to the
+    raw text when piped or in agent mode, so machine consumers get the exact markdown source."""
+    if not _is_human_tty():
+        typer.echo(text)
+        return
+    try:
+        from rich.console import Console
+        from rich.markdown import Markdown
+    except ImportError:
+        typer.echo(text)  # rich (via typer's extra) not installed - plain fallback
+        return
+    Console().print(Markdown(text))
+
+
 def _emit_fields(it: dict, indent: str = "") -> None:
     """Labeled lines: `id:`, then `name:`, then `description:` (most nodes) or `value:` (notes/links).
     Missing fields are skipped."""
-    typer.echo(f"{indent}id: {it['id']}")
+    typer.echo(f"{indent}{_color('id', fg='cyan')}: {_color(str(it['id']), dim=True)}")
     if it.get("name"):
-        typer.echo(f"{indent}name: {it['name']}")
+        typer.echo(f"{indent}{_color('name', fg='cyan')}: {_color(str(it['name']), bold=True)}")
     if it.get("description"):
-        typer.echo(f"{indent}description: {it['description']}")
+        typer.echo(f"{indent}{_color('description', fg='cyan')}: {it['description']}")
     if it.get("value"):
-        typer.echo(f"{indent}value: {it['value']}")
+        typer.echo(f"{indent}{_color('value', fg='cyan')}: {it['value']}")
 
 
 def _print_view(view: dict) -> None:
@@ -178,7 +212,7 @@ def _print_view(view: dict) -> None:
         items = view.get(kind)
         if not items:
             continue
-        typer.echo(f"\n{kind} ({len(items)}):")  # count = a little more structure for the LLM
+        typer.echo(f"\n{_color(kind, fg='magenta', bold=True)} ({len(items)}):")  # count = structure for the LLM
         for it in items:  # labeled fields, blank line separates entries
             _emit_fields(it, indent="  ")
             typer.echo("")
@@ -322,7 +356,7 @@ def workspace_list(ctx: typer.Context) -> None:
         typer.echo("(none)")
         return
     for ws in workspaces:
-        typer.echo(f"{ws.id}  {ws.name}")
+        typer.echo(f"{_color(ws.id, dim=True)}  {_color(ws.name, bold=True)}")
 
 
 @workspace_app.command("get")
@@ -483,7 +517,8 @@ def project_list(ctx: typer.Context) -> None:
         typer.echo("(none)")
         return
     for project in projects:
-        typer.echo(f"{project.id}  {project.status.value:9} {project.name}")
+        status = _color(f"{project.status.value:9}", fg="green" if project.status.value == "active" else "yellow")
+        typer.echo(f"{_color(project.id, dim=True)}  {status} {_color(project.name, bold=True)}")
 
 
 @project_app.command("use")
@@ -528,7 +563,7 @@ def project_get(
 def project_context(ctx: typer.Context) -> None:
     """Emit the agent 'restore knowledge' blob for a project (always markdown)."""
     store = _store(ctx)
-    typer.echo(build_context(store, store.get_project(_project(ctx))))
+    _render_markdown(build_context(store, store.get_project(_project(ctx))))
 
 
 @project_app.command("update")
@@ -575,11 +610,11 @@ def note_list(ctx: typer.Context) -> None:
         _print_json(notes)
         return
     for i, note in enumerate(notes):
-        typer.echo(f"[{i}] {note}")
+        typer.echo(f"{_color(f'[{i}]', dim=True)} {note}")
 
 
-@note_app.command("rm")
-def note_rm(ctx: typer.Context, index: int, confirm: bool = _CONFIRM) -> None:
+@note_app.command("delete")
+def note_delete(ctx: typer.Context, index: int, confirm: bool = _CONFIRM) -> None:
     pid = _project(ctx)
     _confirm_delete(confirm, f"note [{index}] on {pid}")
     _store(ctx).remove_note(pid, index)
@@ -606,11 +641,14 @@ def link_list(ctx: typer.Context) -> None:
         _print_json(links)
         return
     for link in links:
-        typer.echo(f"{link.id}  {link.type.value:13} {link.name}  {link.url}")
+        typer.echo(
+            f"{_color(link.id, dim=True)}  {_color(f'{link.type.value:13}', fg='cyan')} "
+            f"{_color(link.name, bold=True)}  {_color(link.url, fg='blue')}"
+        )
 
 
-@link_app.command("rm")
-def link_rm(ctx: typer.Context, link_id: str, confirm: bool = _CONFIRM) -> None:
+@link_app.command("delete")
+def link_delete(ctx: typer.Context, link_id: str, confirm: bool = _CONFIRM) -> None:
     pid = _project(ctx)
     _confirm_delete(confirm, f"link {link_id} on {pid}")
     _store(ctx).remove_link(pid, link_id)
@@ -641,7 +679,7 @@ def doc_list(ctx: typer.Context) -> None:
         _print_json(docs)
         return
     for doc in docs:
-        typer.echo(f"{doc.id}  {doc.title}")
+        typer.echo(f"{_color(doc.id, dim=True)}  {_color(doc.name, bold=True)}")
 
 
 @doc_app.command("get")
@@ -650,7 +688,7 @@ def doc_get(ctx: typer.Context, doc_id: str) -> None:
     if _OUT.json:
         _print_json(doc)
         return
-    typer.echo(doc.body)
+    _render_markdown(doc.body)
 
 
 @doc_app.command("edit")
@@ -674,11 +712,14 @@ def doc_edit(
     typer.echo("ok")
 
 
-@doc_app.command("rm")
-def doc_rm(ctx: typer.Context, doc_id: str, confirm: bool = _CONFIRM) -> None:
+@doc_app.command("delete")
+def doc_delete(ctx: typer.Context, doc_id: str, confirm: bool = _CONFIRM) -> None:
     pid = _project(ctx)
     _confirm_delete(confirm, f"doc {doc_id} on {pid}")
-    _store(ctx).remove_doc(pid, doc_id)
+    try:
+        _store(ctx).remove_doc(pid, doc_id)
+    except FileNotFoundError:
+        _fail(f"No such doc: {doc_id}")
     typer.echo("ok")
 
 
@@ -722,7 +763,10 @@ def list_get(ctx: typer.Context, list_id: str) -> None:
     if _OUT.json:
         _print_json(entry_list)
         return
-    typer.echo(f"{entry_list.id}  {entry_list.name}  ({len(entry_list.entries)} entries)")
+    typer.echo(
+        f"{_color(entry_list.id, dim=True)}  {_color(entry_list.name, bold=True)}  "
+        f"{_color(f'({len(entry_list.entries)} entries)', dim=True)}"
+    )
     typer.echo(entry_list.description)
 
 
@@ -732,8 +776,15 @@ def list_list(ctx: typer.Context) -> None:
     if _OUT.json:
         _print_json(lists)
         return
+    if not lists:
+        typer.echo("(none)")
+        return
+    name_w = min(max(len(el.name) for el in lists), 28)
     for entry_list in lists:
-        typer.echo(f"{entry_list.id}  {entry_list.name}  ({len(entry_list.entries)})")
+        typer.echo(
+            f"{_color(entry_list.id, dim=True)}  {_color(f'{entry_list.name:{name_w}}', bold=True)}  "
+            f"{_color(f'({len(entry_list.entries)})', dim=True)}"
+        )
 
 
 @list_app.command("export")
@@ -758,8 +809,8 @@ def list_export(
         typer.echo(text, nl=False)
 
 
-@list_app.command("rm-entry")
-def list_rm_entry(
+@list_app.command("delete-entry")
+def list_delete_entry(
     ctx: typer.Context,
     list_id: str,
     index: int = typer.Argument(..., help="0-based position of the entry to remove."),
@@ -775,8 +826,8 @@ def list_rm_entry(
     typer.echo(json.dumps(removed, ensure_ascii=False))  # re-add with: list add ... --stdin
 
 
-@list_app.command("rm")
-def list_rm(ctx: typer.Context, list_id: str, confirm: bool = _CONFIRM) -> None:
+@list_app.command("delete")
+def list_delete(ctx: typer.Context, list_id: str, confirm: bool = _CONFIRM) -> None:
     pid = _project(ctx)
     _confirm_delete(confirm, f"list {list_id} on {pid}")
     _store(ctx).remove_list(pid, list_id)
@@ -790,8 +841,12 @@ def asset_add(
     file: str = typer.Argument(..., help="Local file to store."),
     description: str = typer.Option(..., "--description", help="Required: what this file is."),
     name: str | None = typer.Option(None, "--name"),
-    category: AssetCategory | None = typer.Option(None, "--category"),
+    category: AssetCategory | None = typer.Option(
+        None, "--category", help="One of: binary, generic, transcript. (Use `doc`/`tool` for those.)"
+    ),
 ) -> None:
+    if category is not None and category not in BYTES_CATEGORIES:
+        _fail("--category must be binary, generic, or transcript; add docs with `doc` and tools with `tool`")
     try:
         asset = _store(ctx).add_asset(_project(ctx), file, description, name, category)
     except (ProjectNotFound, ValueError) as e:
@@ -801,12 +856,17 @@ def asset_add(
 
 @asset_app.command("list")
 def asset_list(ctx: typer.Context) -> None:
-    assets = _store(ctx).get_project(_project(ctx)).assets
+    # project.assets holds every category; `asset list` shows only the byte files (docs/tools have
+    # their own `list`).
+    assets = [a for a in _store(ctx).get_project(_project(ctx)).assets if a.category in BYTES_CATEGORIES]
     if _OUT.json:
         _print_json(assets)
         return
     for asset in assets:
-        typer.echo(f"{asset.id}  {asset.size:>9}  {asset.media_type:24} {asset.name}")
+        typer.echo(
+            f"{_color(asset.id, dim=True)}  {asset.size:>9}  "
+            f"{_color(f'{asset.media_type:24}', fg='cyan')} {_color(asset.name, bold=True)}"
+        )
 
 
 @asset_app.command("download")
@@ -817,11 +877,14 @@ def asset_download(ctx: typer.Context, asset_id: str, dest: str) -> None:
     typer.echo(dest)
 
 
-@asset_app.command("rm")
-def asset_rm(ctx: typer.Context, asset_id: str, confirm: bool = _CONFIRM) -> None:
+@asset_app.command("delete")
+def asset_delete(ctx: typer.Context, asset_id: str, confirm: bool = _CONFIRM) -> None:
     pid = _project(ctx)
     _confirm_delete(confirm, f"asset {asset_id} on {pid}")
-    _store(ctx).remove_asset(pid, asset_id)
+    try:
+        _store(ctx).remove_asset(pid, asset_id)
+    except FileNotFoundError:
+        _fail(f"No such asset: {asset_id}")
     typer.echo("ok")
 
 
@@ -852,8 +915,12 @@ def task_list(ctx: typer.Context) -> None:
     if not tasks:
         typer.echo("(none)")
         return
+    name_w = min(max(len(t.title) for t in tasks), 28)
+    width = _term_width()
     for task in tasks:
-        typer.echo(f"{task.id}  {task.title}  - {task.description}")
+        head = f"{task.id}  {task.title:{name_w}}  - "
+        desc = _truncate(task.description, max(10, width - len(head))) if _is_human_tty() else task.description
+        typer.echo(f"{_color(task.id, dim=True)}  {_color(f'{task.title:{name_w}}', bold=True)}  - {desc}")
 
 
 @task_app.command("attach")
@@ -872,8 +939,8 @@ def task_attach(
     typer.echo(asset.id)
 
 
-@task_app.command("rm")
-def task_rm(ctx: typer.Context, task_id: str, confirm: bool = _CONFIRM) -> None:
+@task_app.command("delete")
+def task_delete(ctx: typer.Context, task_id: str, confirm: bool = _CONFIRM) -> None:
     """Drop a task from the list."""
     pid = _project(ctx)
     _confirm_delete(confirm, f"task {task_id} on {pid}")
@@ -890,31 +957,81 @@ def tool_add(
     ctx: typer.Context,
     name: str = typer.Option(..., "--name"),
     description: str = typer.Option(..., "--description", help="Required: what it does / why it's needed."),
-    kind: ToolKind = typer.Option(ToolKind.tool, "--type"),
-    restore: str = typer.Option("", "--restore", help="Command or steps to install/enable it if missing."),
+    kind: str = typer.Option("tool", "--type", help="'tool' or 'skill'."),
+    file: str | None = typer.Argument(None, help="Optional file to upload (e.g. a script or binary)."),
 ) -> None:
+    """Register a tool/skill the project depends on. It's stored like any asset: attach a file to
+    upload it, or leave it fileless as a named dependency."""
+    if kind not in TOOL_CATEGORIES:
+        _fail("--type must be 'tool' or 'skill'")
     try:
-        tool = _store(ctx).add_tool(_project(ctx), name, description, kind, restore)
-    except (ProjectNotFound, ValueError) as e:
+        tool = _store(ctx).add_tool(_project(ctx), name, description, AssetCategory(kind), file)
+    except (ProjectNotFound, ValueError, FileNotFoundError) as e:
         _fail(str(e))
     typer.echo(tool.id)
 
 
 @tool_app.command("list")
 def tool_list(ctx: typer.Context) -> None:
-    tools = _store(ctx).get_project(_project(ctx)).tools
+    tools = _store(ctx).list_tools(_project(ctx))
     if _OUT.json:
         _print_json(tools)
         return
-    for tool in tools:
-        typer.echo(f"{tool.id}  {tool.kind.value:5} {tool.name}  - {tool.description}")
+    if not tools:
+        typer.echo("(none)")
+        return
+    # One aligned row per tool; a [file] flag marks tools that carry an uploaded file.
+    name_w = min(max(len(t.name) for t in tools), 28)
+    width = _term_width()
+    for t in tools:
+        flag_txt = "[file] " if t.path else ""
+        head = f"{t.id}  {t.category.value:5}  {t.name:{name_w}}  {flag_txt}"
+        desc = _truncate(t.description, max(10, width - len(head))) if _is_human_tty() else t.description
+        typer.echo(
+            f"{_color(t.id, dim=True)}  {_color(f'{t.category.value:5}', fg='cyan')}  "
+            f"{_color(f'{t.name:{name_w}}', bold=True)}  {_color(flag_txt, fg='yellow')}{desc}"
+        )
 
 
-@tool_app.command("rm")
-def tool_rm(ctx: typer.Context, tool_id: str, confirm: bool = _CONFIRM) -> None:
+@tool_app.command("get")
+def tool_get(ctx: typer.Context, tool_id: str) -> None:
+    """Show one tool in full."""
+    try:
+        tool = _store(ctx).get_asset(_project(ctx), tool_id)
+    except FileNotFoundError:
+        _fail(f"No such tool: {tool_id}")
+    if tool.category not in TOOL_CATEGORIES:
+        _fail(f"{tool_id} is not a tool (it's a {tool.category.value})")
+    if _OUT.json:
+        _print_json(tool)
+        return
+    typer.echo(f"{_color(tool.id, dim=True)}  {_color(tool.category.value, fg='cyan')}  {_color(tool.name, bold=True)}")
+    if tool.description:
+        typer.echo(tool.description)
+    if tool.path:
+        typer.echo(_color(f"file: {tool.name} ({tool.media_type}, {tool.size} bytes)", fg="green"))
+
+
+@tool_app.command("download")
+def tool_download(ctx: typer.Context, tool_id: str, dest: str) -> None:
+    """Download a tool's uploaded file (fails if the tool is fileless)."""
+    try:
+        data = _store(ctx).read_asset_bytes(_project(ctx), tool_id)
+    except FileNotFoundError:
+        _fail(f"tool {tool_id} has no uploaded file to download")
+    with open(dest, "wb") as f:
+        f.write(data)
+    typer.echo(dest)
+
+
+@tool_app.command("delete")
+def tool_delete(ctx: typer.Context, tool_id: str, confirm: bool = _CONFIRM) -> None:
     pid = _project(ctx)
     _confirm_delete(confirm, f"tool {tool_id} on {pid}")
-    _store(ctx).remove_tool(pid, tool_id)
+    try:
+        _store(ctx).remove_tool(pid, tool_id)
+    except FileNotFoundError:
+        _fail(f"No such tool: {tool_id}")
     typer.echo("ok")
 
 

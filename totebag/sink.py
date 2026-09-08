@@ -26,7 +26,7 @@ import yaml
 
 from .models import (
     Asset,
-    Doc,
+    AssetCategory,
     EntryList,
     Project,
     ProjectType,
@@ -93,16 +93,6 @@ class Sink(ABC):
         `recursive`, every child as id + description, without loading item bodies."""
         ...
 
-    # --- documents ---------------------------------------------------------
-    @abstractmethod
-    def save_doc(self, pid: str, doc: Doc) -> None: ...
-    @abstractmethod
-    def load_doc(self, pid: str, doc_id: str) -> Doc: ...
-    @abstractmethod
-    def list_docs(self, pid: str) -> list[Doc]: ...
-    @abstractmethod
-    def delete_doc(self, pid: str, doc_id: str) -> None: ...
-
     # --- lists -------------------------------------------------------------
     @abstractmethod
     def save_list(self, pid: str, entry_list: EntryList) -> None: ...
@@ -113,9 +103,16 @@ class Sink(ABC):
     @abstractmethod
     def delete_list(self, pid: str, list_id: str) -> None: ...
 
-    # --- assets ------------------------------------------------------------
+    # --- assets (unified: documents, tools/skills, and byte files) ---------
     @abstractmethod
-    def save_asset(self, pid: str, asset: Asset, filename: str, data: bytes) -> None: ...
+    def save_asset(self, pid: str, asset: Asset, filename: str | None = None, data: bytes | None = None) -> None:
+        """Persist an asset. Byte categories pass `filename`+`data`; a document carries its text in
+        the model (`body`) and passes neither."""
+        ...
+    @abstractmethod
+    def load_asset(self, pid: str, asset_id: str) -> Asset: ...
+    @abstractmethod
+    def list_assets(self, pid: str) -> list[Asset]: ...
     @abstractmethod
     def load_asset_bytes(self, pid: str, asset_id: str) -> bytes: ...
     @abstractmethod
@@ -174,10 +171,16 @@ class OKFSink(Sink):
           workspaces/<wsp_id>/
             workspace.md                    # container metadata + okf_version marker
             projects/prj_x/
-              project.md                    # type: project (frontmatter carries notes/links/tools)
+              project.md                    # type: project (frontmatter carries notes/links)
               docs/doc_y.md                 # type: document (body = markdown)
-              assets/ast_z/{report.pdf, asset.md}   # binary + type: asset concept
+              assets/ast_z/{report.pdf, asset.md}   # byte asset: binary + type: asset concept
+              assets/tol_v/asset.md         # a tool/skill: a (maybe fileless) asset, category=tool
               tasks/tsk_w/task.md           # type: task; attachments in tasks/tsk_w/assets/
+
+    Everything a project stores is one `Asset`, distinguished by `AssetCategory`. Only `document`
+    is special: it is editable text, kept in docs/ as an OKF `type: document`. Every other category
+    (binary/generic/transcript, and tool/skill) is a byte asset in assets/ (`type: asset`), where a
+    tool is simply an asset whose `category` is tool/skill - it may carry a file or be fileless.
     """
 
     def __init__(self, root: str | None = None, workspace: str | None = None) -> None:
@@ -368,11 +371,11 @@ class OKFSink(Sink):
     def save_project(self, project: Project) -> None:
         # Structured meta -> frontmatter; free-form instructions -> body. `type` is reserved by
         # OKF for the concept kind, so the project's own ProjectType is carried as `project_type`.
-        # Notes, links, and tools live inline in project.md's frontmatter (small, few, edited
-        # together). Only assets stay as their own files - they may be binaries.
+        # Notes and links live inline in project.md's frontmatter (small, few, edited together).
+        # Assets (docs, tools, byte files) each stay as their own concept files.
         meta = project.model_dump(mode="json", exclude={"assets", "instructions"})
         meta["project_type"] = meta.pop("type")
-        for empty in ("notes", "links", "tools"):
+        for empty in ("notes", "links"):
             if not meta.get(empty):
                 meta.pop(empty, None)  # keep frontmatter clean when there are none
         meta = {"type": "project", "title": project.name, **meta}
@@ -388,10 +391,8 @@ class OKFSink(Sink):
         meta["type"] = meta.pop("project_type", ProjectType.other.value)
         meta["instructions"] = body
         _legacy_summary_to_description(meta)  # pre-rename stores carried `summary`
-        for tool in meta.get("tools") or []:
-            _legacy_summary_to_description(tool)
-        project = Project.model_validate(meta)  # notes, links, tools come inline from frontmatter
-        project.assets = self._load_assets(pid)
+        project = Project.model_validate(meta)  # notes, links come inline from frontmatter
+        project.assets = self.list_assets(pid)  # docs, tools, and byte files, all their own files
         return project
 
     def list_projects(self) -> list[Project]:
@@ -448,13 +449,15 @@ class OKFSink(Sink):
             {"id": m.get("id", ""), "name": m.get("title") or "", "description": m.get("description") or ""}
             for m, _b in frontmatters(self._lists_dir(pid))
         ]
+        # Both tools and plain files are byte assets in assets/; split them by category for the view.
+        asset_concepts = self._subdir_concepts(self._p("projects", pid, "assets"), "asset.md")
         view["tools"] = [
-            {"id": t.get("id", ""), "name": t.get("name") or "", "description": t.get("description") or t.get("summary") or ""}
-            for t in (meta.get("tools") or [])
+            {"id": m.get("id", ""), "name": m.get("title") or "", "description": m.get("description") or ""}
+            for m in asset_concepts if m.get("category") in ("tool", "skill")
         ]
         view["assets"] = [
             {"id": m.get("id", ""), "description": m.get("description") or m.get("summary") or m.get("title", "")}
-            for m in self._subdir_concepts(self._p("projects", pid, "assets"), "asset.md")
+            for m in asset_concepts if m.get("category") not in ("tool", "skill")
         ]
         view["tasks"] = [
             {"id": m.get("id", ""), "description": m.get("description") or m.get("summary") or ""}
@@ -475,44 +478,26 @@ class OKFSink(Sink):
                 out.append(meta)
         return out
 
-    # --- docs (type: document; body = markdown) ----------------------------
+    # --- document assets (type: document; body = markdown) -----------------
     def _docs_dir(self, pid: str) -> str:
         return self._p("projects", pid, "docs")
 
     def _doc_path(self, pid: str, doc_id: str) -> str:
         return posixpath.join(self._docs_dir(pid), f"{doc_id}.md")
 
-    def _load_doc_file(self, path: str) -> Doc:
+    def _save_doc_asset(self, pid: str, asset: Asset) -> None:
+        meta = {"type": "document", "id": asset.id, "title": asset.name, "description": asset.description or None}
+        self._write_text(self._doc_path(pid, asset.id), _dump_concept(meta, asset.body))
+
+    def _load_doc_asset(self, path: str) -> Asset:
         meta, body = _load_concept(self._read_text(path))
-        return Doc(
+        return Asset(
             id=meta.get("id"),
-            title=meta.get("title", ""),
-            description=meta.get("description") or meta.get("summary"),
+            name=meta.get("title", ""),
+            description=meta.get("description") or meta.get("summary") or "",
+            category=AssetCategory.document,
             body=body,
         )
-
-    def save_doc(self, pid: str, doc: Doc) -> None:
-        meta = {"type": "document", "id": doc.id, "title": doc.title, "description": doc.description}
-        self._write_text(self._doc_path(pid, doc.id), _dump_concept(meta, doc.body))
-
-    def list_docs(self, pid: str) -> list[Doc]:
-        docs_dir = self._docs_dir(pid)
-        if not self.fs.exists(docs_dir):
-            return []
-        docs: list[Doc] = []
-        for entry in sorted(self.fs.ls(docs_dir, detail=False)):
-            if entry.endswith(".md"):
-                docs.append(self._load_doc_file(entry))
-        return docs
-
-    def load_doc(self, pid: str, doc_id: str) -> Doc:
-        path = self._doc_path(pid, doc_id)
-        if not self.fs.exists(path):
-            raise FileNotFoundError(doc_id)
-        return self._load_doc_file(path)
-
-    def delete_doc(self, pid: str, doc_id: str) -> None:
-        self.fs.rm(self._doc_path(pid, doc_id))
 
     # --- lists (type: list; body = JSONL, one entry object per line) --------
     def _lists_dir(self, pid: str) -> str:
@@ -560,7 +545,7 @@ class OKFSink(Sink):
     def delete_list(self, pid: str, list_id: str) -> None:
         self.fs.rm(self._list_path(pid, list_id))
 
-    # --- assets (type: asset; resource = the binary) -----------------------
+    # --- byte assets (type: asset; resource = the binary) ------------------
     def _asset_dir(self, pid: str, asset_id: str) -> str:
         return self._p("projects", pid, "assets", asset_id)
 
@@ -570,59 +555,91 @@ class OKFSink(Sink):
             "id": asset.id,
             "title": asset.name,
             "description": asset.description or None,
-            "resource": f"/projects/{pid}/{asset.path}",  # bundle-relative per OKF
+            "resource": f"/projects/{pid}/{asset.path}" if asset.path else None,  # bundle-relative per OKF
             "media_type": asset.media_type,
             "category": asset.category.value,
             "size": asset.size,
         }
         self._write_text(posixpath.join(self._asset_dir(pid, asset.id), "asset.md"), _dump_concept(meta))
 
-    def _load_assets(self, pid: str) -> list[Asset]:
+    def _load_byte_asset(self, sub: str) -> Asset | None:
+        asset_id = posixpath.basename(sub.rstrip("/"))
+        concept = posixpath.join(sub, "asset.md")
+        if not self.fs.exists(concept):
+            return None
+        meta, _ = _load_concept(self._read_text(concept))
+        # The binary is the one file in the dir that isn't the concept doc (a fileless asset, e.g. an
+        # external tool, has none).
+        binaries = [f for f in self.fs.ls(sub, detail=False) if not f.rstrip("/").endswith("/asset.md")]
+        filename = posixpath.basename(binaries[0].rstrip("/")) if binaries else None
+        return Asset(
+            id=meta.get("id", asset_id),
+            name=meta.get("title", filename or ""),
+            description=meta.get("description") or meta.get("summary") or "",
+            media_type=meta.get("media_type", "application/octet-stream"),
+            category=meta.get("category", "generic"),
+            size=meta.get("size", 0),
+            path=f"assets/{asset_id}/{filename}" if filename else "",
+        )
+
+    def _load_dir_assets(self, d: str, loader) -> list[Asset]:
+        """Load every `.md` concept in a flat dir (docs, tools) via `loader`."""
+        if not self.fs.exists(d):
+            return []
+        return [loader(e) for e in sorted(self.fs.ls(d, detail=False)) if e.endswith(".md")]
+
+    def _load_byte_assets(self, pid: str) -> list[Asset]:
         d = self._p("projects", pid, "assets")
         if not self.fs.exists(d):
             return []
-        assets: list[Asset] = []
-        for sub in sorted(self.fs.ls(d, detail=False)):
-            asset_id = posixpath.basename(sub.rstrip("/"))
-            concept = posixpath.join(sub, "asset.md")
-            if not self.fs.exists(concept):
-                continue
-            meta, _ = _load_concept(self._read_text(concept))
-            # The binary is the one file in the dir that isn't the concept doc.
-            binaries = [f for f in self.fs.ls(sub, detail=False) if not f.rstrip("/").endswith("/asset.md")]
-            filename = posixpath.basename(binaries[0].rstrip("/")) if binaries else asset_id
-            assets.append(
-                Asset(
-                    id=meta.get("id", asset_id),
-                    name=meta.get("title", filename),
-                    description=meta.get("description") or meta.get("summary") or "",
-                    media_type=meta.get("media_type", "application/octet-stream"),
-                    category=meta.get("category", "generic"),
-                    size=meta.get("size", 0),
-                    path=f"assets/{asset_id}/{filename}",
-                )
-            )
-        return assets
+        out = [self._load_byte_asset(sub) for sub in sorted(self.fs.ls(d, detail=False))]
+        return [a for a in out if a is not None]
 
-    def save_asset(self, pid: str, asset: Asset, filename: str, data: bytes) -> None:
-        rel = f"assets/{asset.id}/{filename}"
-        self._write_bytes(self._p("projects", pid, rel), data)
-        asset.path = rel
+    def save_asset(self, pid: str, asset: Asset, filename: str | None = None, data: bytes | None = None) -> None:
+        """Route by category: `document` is text in docs/; every other category is a byte asset in
+        assets/ (a tool/skill is just such an asset). The file is optional - a fileless asset
+        (e.g. a named tool dependency) writes just the concept."""
+        if asset.category == AssetCategory.document:
+            self._save_doc_asset(pid, asset)
+            return
+        if data is not None and filename:
+            rel = f"assets/{asset.id}/{filename}"
+            self._write_bytes(self._p("projects", pid, rel), data)
+            asset.path = rel
         self._write_asset_concept(pid, asset)  # asset index lives on disk as a concept file
 
-    def load_asset_bytes(self, pid: str, asset_id: str) -> bytes:
-        asset = next((a for a in self._load_assets(pid) if a.id == asset_id), None)
+    def list_assets(self, pid: str) -> list[Asset]:
+        """Every asset of the project: text documents in docs/, everything else in assets/."""
+        return [
+            *self._load_dir_assets(self._docs_dir(pid), self._load_doc_asset),
+            *self._load_byte_assets(pid),
+        ]
+
+    def load_asset(self, pid: str, asset_id: str) -> Asset:
+        doc_path = self._doc_path(pid, asset_id)
+        if self.fs.exists(doc_path):
+            return self._load_doc_asset(doc_path)
+        asset = self._load_byte_asset(self._asset_dir(pid, asset_id))
         if asset is None:
+            raise FileNotFoundError(asset_id)
+        return asset
+
+    def load_asset_bytes(self, pid: str, asset_id: str) -> bytes:
+        asset = self._load_byte_asset(self._asset_dir(pid, asset_id))
+        if asset is None or not asset.path:
             raise FileNotFoundError(asset_id)
         return self._read_bytes(self._p("projects", pid, asset.path))
 
     def delete_asset(self, pid: str, asset_id: str) -> None:
+        doc_path = self._doc_path(pid, asset_id)
+        if self.fs.exists(doc_path):
+            self.fs.rm(doc_path)
+            return
         d = self._asset_dir(pid, asset_id)
         if not self.fs.exists(d):
             raise FileNotFoundError(asset_id)
         self.fs.rm(d, recursive=True)
 
-    # --- tools / skills (type: tool; body = restore instructions) ----------
     # --- tasks (type: task; own folder, own attachments) -------------------
     def _tasks_dir(self, pid: str) -> str:
         return self._p("projects", pid, "tasks")

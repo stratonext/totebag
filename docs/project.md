@@ -26,14 +26,14 @@ One **workspace** holds many **projects**. Each project carries:
 | **links** | typed URLs (generic / source_code / documentation / tool) | - |
 | **lists** | named collections of schema-free entries, exportable as CSV | required (description) |
 | **assets** | arbitrary files (bytes not inlined into context) | required |
-| **tools** | tools/skills the project needs, each with a restore command | required |
+| **tools** | tools/skills the project needs (an asset by category; file optional) | required |
 | **tasks** | future work to pick up later (deferred/postponed), each in its own folder with attachments | required |
 
 ## The core loop
 
 An agent starting a task runs `totebag project context <id>` and gets a single markdown blob -
-summary, instructions, tools to restore, notes, links, docs, assets, and the open task list. It
-restores any missing tools, works the task list, and writes knowledge back as it learns. The next session (or a different LLM, or a different vendor) inherits all of it.
+summary, instructions, tools/skills, notes, links, docs, assets, and the open task list. It
+downloads any missing tool files, works the task list, and writes knowledge back as it learns. The next session (or a different LLM, or a different vendor) inherits all of it.
 
 Two rules keep the store high-signal:
 

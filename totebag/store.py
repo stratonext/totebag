@@ -21,9 +21,9 @@ from typing import Any
 from . import __version__
 from .ids import generate_id
 from .models import (
+    TOOL_CATEGORIES,
     Asset,
     AssetCategory,
-    Doc,
     EntryList,
     Link,
     LinkType,
@@ -31,8 +31,6 @@ from .models import (
     ProjectType,
     Stamp,
     Task,
-    Tool,
-    ToolKind,
     Workspace,
     _now,
 )
@@ -85,15 +83,6 @@ def entries_to_csv(entries: list[dict[str, Any]]) -> str:
     for entry in entries:
         writer.writerow({k: _csv_cell(v) for k, v in entry.items()})
     return buf.getvalue()
-
-
-def _guess_category(media_type: str) -> AssetCategory:
-    if media_type.startswith("text/") or media_type in {
-        "application/pdf",
-        "application/json",
-    }:
-        return AssetCategory.document
-    return AssetCategory.generic
 
 
 class Store:
@@ -242,19 +231,22 @@ class Store:
         project.links = [link for link in project.links if link.id != link_id]
         self.save_project(project)
 
-    # --- docs --------------------------------------------------------------
-    def add_doc(self, pid: str, title: str, body: str, description: str) -> Doc:
+    # --- docs (document-category assets) -----------------------------------
+    def add_doc(self, pid: str, title: str, body: str, description: str) -> Asset:
         self.sink.load_project(pid)  # ensure exists
         _require_description(description, "doc")
-        doc = Doc(id=generate_id("doc"), title=title, description=description, body=body)
-        self.sink.save_doc(pid, doc)
+        doc = Asset(
+            id=generate_id("doc"), name=title, description=description,
+            category=AssetCategory.document, body=body,
+        )
+        self.sink.save_asset(pid, doc)
         return doc
 
-    def list_docs(self, pid: str) -> list[Doc]:
-        return self.sink.list_docs(pid)
+    def list_docs(self, pid: str) -> list[Asset]:
+        return [a for a in self.sink.list_assets(pid) if a.category == AssetCategory.document]
 
-    def get_doc(self, pid: str, doc_id: str) -> Doc:
-        return self.sink.load_doc(pid, doc_id)
+    def get_doc(self, pid: str, doc_id: str) -> Asset:
+        return self.sink.load_asset(pid, doc_id)
 
     def update_doc(
         self,
@@ -263,19 +255,19 @@ class Store:
         body: str | None = None,
         description: str | None = None,
         title: str | None = None,
-    ) -> Doc:
-        doc = self.sink.load_doc(pid, doc_id)
+    ) -> Asset:
+        doc = self.sink.load_asset(pid, doc_id)
         if body is not None:
             doc.body = body
         if description is not None:
             doc.description = description
         if title is not None:
-            doc.title = title
-        self.sink.save_doc(pid, doc)
+            doc.name = title
+        self.sink.save_asset(pid, doc)
         return doc
 
     def remove_doc(self, pid: str, doc_id: str) -> None:
-        self.sink.delete_doc(pid, doc_id)
+        self.sink.delete_asset(pid, doc_id)
 
     # --- lists -------------------------------------------------------------
     def create_list(self, pid: str, name: str, description: str) -> EntryList:
@@ -333,11 +325,14 @@ class Store:
             name=name or filename,
             description=description,
             media_type=media_type,
-            category=category or _guess_category(media_type),
+            category=category or AssetCategory.generic,
             size=len(data),
         )
         self.sink.save_asset(pid, asset, filename, data)
         return asset
+
+    def get_asset(self, pid: str, asset_id: str) -> Asset:
+        return self.sink.load_asset(pid, asset_id)
 
     def read_asset_bytes(self, pid: str, asset_id: str) -> bytes:
         return self.sink.load_asset_bytes(pid, asset_id)
@@ -345,26 +340,37 @@ class Store:
     def remove_asset(self, pid: str, asset_id: str) -> None:
         self.sink.delete_asset(pid, asset_id)
 
-    # --- tools / skills ----------------------------------------------------
+    # --- tools / skills (tool|skill-category assets, stored like any asset) -
     def add_tool(
         self,
         pid: str,
         name: str,
         description: str,
-        kind: ToolKind = ToolKind.tool,
-        restore: str = "",
-    ) -> Tool:
+        kind: AssetCategory = AssetCategory.tool,
+        src_path: str | None = None,
+    ) -> Asset:
+        """A tool/skill is just an asset with a tool category. It may carry a file (uploaded like any
+        asset) or be fileless (a named dependency the project depends on)."""
+        self.sink.load_project(pid)  # ensure exists
         _require_description(description, "tool")
-        project = self.sink.load_project(pid)
-        tool = Tool(id=generate_id("tol"), name=name, kind=kind, description=description, restore=restore)
-        project.tools.append(tool)
-        self.save_project(project)
+        tool = Asset(id=generate_id("tol"), name=name, description=description, category=kind)
+        if src_path:
+            src_path = os.path.expanduser(src_path)
+            filename = os.path.basename(src_path)
+            with open(src_path, "rb") as f:
+                data = f.read()
+            tool.media_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+            tool.size = len(data)
+            self.sink.save_asset(pid, tool, filename, data)
+        else:
+            self.sink.save_asset(pid, tool)
         return tool
 
+    def list_tools(self, pid: str) -> list[Asset]:
+        return [a for a in self.sink.list_assets(pid) if a.category in TOOL_CATEGORIES]
+
     def remove_tool(self, pid: str, tool_id: str) -> None:
-        project = self.sink.load_project(pid)
-        project.tools = [tool for tool in project.tools if tool.id != tool_id]
-        self.save_project(project)
+        self.sink.delete_asset(pid, tool_id)
 
     # --- tasks -------------------------------------------------------------
     def add_task(self, pid: str, title: str, description: str, body: str = "") -> Task:
@@ -400,7 +406,7 @@ class Store:
             name=name or filename,
             description=description,
             media_type=media_type,
-            category=_guess_category(media_type),
+            category=AssetCategory.generic,
             size=len(data),
         )
         self.sink.save_task_asset(pid, task, asset, filename, data)
@@ -425,22 +431,16 @@ class Store:
                 haystack = f"{link.name} {link.url} {link.description}".lower()
                 if q in haystack:
                     hits.append((project.id, "link", link.id, f"{link.name} - {link.url}"))
+            # One loop over every asset - docs, tools, and byte files all live in project.assets,
+            # each tagged by category, which doubles as the hit kind.
             for asset in project.assets:
-                haystack = f"{asset.name} {asset.description}".lower()
+                haystack = f"{asset.name} {asset.description} {asset.body}".lower()
                 if q in haystack:
-                    hits.append((project.id, "asset", asset.id, asset.name))
-            for tool in project.tools:
-                haystack = f"{tool.name} {tool.description} {tool.restore}".lower()
-                if q in haystack:
-                    hits.append((project.id, "tool", tool.id, tool.name))
+                    hits.append((project.id, asset.category.value, asset.id, asset.name))
             for task in self.list_tasks(project.id):
                 haystack = f"{task.title} {task.description} {task.body}".lower()
                 if q in haystack:
                     hits.append((project.id, "task", task.id, task.title))
-            for doc in self.list_docs(project.id):
-                haystack = f"{doc.title} {doc.description or ''} {doc.body}".lower()
-                if q in haystack:
-                    hits.append((project.id, "doc", doc.id, doc.title))
             for entry_list in self.list_lists(project.id):
                 entries_text = json.dumps(entry_list.entries, ensure_ascii=False)
                 haystack = f"{entry_list.name} {entry_list.description} {entries_text}".lower()

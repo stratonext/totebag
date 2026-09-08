@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from totebag.context import build_context
-from totebag.models import LinkType, ProjectStatus, ToolKind
+from totebag.models import BYTES_CATEGORIES, AssetCategory, LinkType, ProjectStatus
 from totebag.store import DescriptionRequired, Store
 
 
@@ -39,13 +39,17 @@ def test_roundtrip(tmp_path: Path) -> None:
     assert p2.description == "Handles invoicing."
     assert p2.notes == ["idempotency key required"]
     assert p2.links[0].name == "Stripe" and p2.links[0].type is LinkType.documentation
-    assert p2.assets[0].description == "the diagram"
-    assert p2.assets[0].size == len("topology v2")
+
+    # project.assets now holds every category; the byte file is one of them
+    files = [a for a in p2.assets if a.category in BYTES_CATEGORIES]
+    assert files[0].description == "the diagram"
+    assert files[0].size == len("topology v2")
 
     docs = s2.list_docs(pid)
     assert len(docs) == 1
-    assert docs[0].id == doc.id and docs[0].description == "3am guide"
-    assert "restart the worker" in docs[0].body
+    assert docs[0].id == doc.id and docs[0].category is AssetCategory.document
+    assert docs[0].description == "3am guide"
+    assert "restart the worker" in docs[0].body  # document body survives the roundtrip
 
     # asset bytes survive the roundtrip
     assert s2.read_asset_bytes(pid, asset.id) == b"topology v2"
@@ -67,19 +71,30 @@ def test_tasks_and_tools(tmp_path: Path) -> None:
     s.init_workspace()
     pid = s.create_project("Payments", description="Billing service").id
 
-    # a tool the project needs, with restore instructions
-    s.add_tool(pid, name="stripe-cli", description="calls the Stripe API", restore="brew install stripe")
+    # a tool the project needs (fileless: just a named dependency)
+    tool = s.add_tool(pid, name="stripe-cli", description="calls the Stripe API")
+    assert tool.id.startswith("tol_")
     # a task with an attachment in its own folder
     task = s.add_task(pid, title="Wire webhooks", description="handle Stripe webhook retries")
     att_src = tmp_path / "payload.json"
     att_src.write_text('{"id": 1}')
     s.add_task_asset(pid, task.id, str(att_src), description="sample webhook payload")
 
-    # reload from a fresh Store
+    # reload from a fresh Store: the tool is a byte asset (category tool) under assets/
     s2 = Store(root)
-    p2 = s2.get_project(pid)
-    assert p2.tools[0].name == "stripe-cli" and p2.tools[0].kind is ToolKind.tool
-    assert p2.tools[0].restore == "brew install stripe"
+    tools = s2.list_tools(pid)
+    assert tools[0].name == "stripe-cli" and tools[0].category is AssetCategory.tool
+
+    # a tool can also carry an uploaded file and be downloaded like any asset
+    script = tmp_path / "deploy.sh"
+    script.write_text("echo deploy")
+    skill = s.add_tool(pid, name="deploy", description="one-shot deploy",
+                       kind=AssetCategory.skill, src_path=str(script))
+    s3 = Store(root)
+    assert s3.read_asset_bytes(pid, skill.id) == b"echo deploy"
+    assert {t.name for t in s3.list_tools(pid)} == {"stripe-cli", "deploy"}
+    # tools are assets but not listed by `asset` (which shows only plain byte files)
+    assert skill.id not in {a.id for a in s3.get_project(pid).assets if a.category in BYTES_CATEGORIES}
 
     tasks = s2.list_tasks(pid)
     assert len(tasks) == 1 and tasks[0].title == "Wire webhooks"
@@ -90,8 +105,7 @@ def test_tasks_and_tools(tmp_path: Path) -> None:
     assert s2.list_tasks(pid) == []
 
     blob = build_context(s2, s2.get_project(pid))
-    for expected in ["stripe-cli", "restore:"]:
-        assert expected in blob
+    assert "stripe-cli" in blob and "Tools & skills" in blob
 
 
 def test_workspaces_are_isolated(tmp_path: Path) -> None:

@@ -1,6 +1,7 @@
-"""Data model - a lean, single-workspace
+"""Data model - a lean, single-workspace store.
 
-Separate item types (assets, docs, links, notes), each editable, each with a description.
+One `Asset` covers docs, tools/skills, and byte files (distinguished by `AssetCategory`); links and
+notes stay their own small types. Everything is editable and carries a required description.
 """
 
 from __future__ import annotations
@@ -42,15 +43,17 @@ class ProjectStatus(StrEnum):
 
 
 class AssetCategory(StrEnum):
-    document = "document"
-    binary = "binary"
-    generic = "generic"
-    transcript = "transcript"
+    document = "document"    # editable markdown, content in `Asset.body`
+    binary = "binary"        # bytes on disk, located by `Asset.path`
+    generic = "generic"      # bytes on disk (default for uploads)
+    transcript = "transcript"  # bytes on disk
+    tool = "tool"            # a tool dependency, stored like a byte asset (file optional)
+    skill = "skill"          # an agent skill dependency, stored like a byte asset (file optional)
 
 
-class ToolKind(StrEnum):
-    tool = "tool"
-    skill = "skill"
+# Category groupings, so callers filter one flat Asset list by purpose without repeating the sets.
+BYTES_CATEGORIES = frozenset({AssetCategory.binary, AssetCategory.generic, AssetCategory.transcript})
+TOOL_CATEGORIES = frozenset({AssetCategory.tool, AssetCategory.skill})
 
 
 class Link(BaseModel):
@@ -62,32 +65,19 @@ class Link(BaseModel):
 
 
 class Asset(BaseModel):
+    """A stored item, unified across purposes. `category` decides where content lives:
+    a `document` keeps editable markdown in `body`; the byte categories (including tool/skill)
+    keep a file located by `path`. One flat model, empty fields for the modes a given category
+    doesn't use."""
+
     id: str
     name: str
     description: str = ""
-    media_type: str = "application/octet-stream"
     category: AssetCategory = AssetCategory.generic
-    size: int = 0
-    path: str = ""  # sink-relative location, assigned by the sink on save (e.g. "assets/ast_x/report.pdf")
-
-
-class Doc(BaseModel):
-    """An editable markdown document. Stored as a .md file with YAML front-matter."""
-
-    id: str
-    title: str
-    description: str | None = None
-    body: str = ""
-
-
-class Tool(BaseModel):
-    """A tool or skill the project depends on, plus how to restore it if it's not available."""
-
-    id: str
-    name: str
-    kind: ToolKind = ToolKind.tool
-    description: str  # required: what it does / why the project needs it
-    restore: str = ""  # command or steps to install/enable it when missing
+    body: str = ""  # document only: the markdown content
+    media_type: str = "application/octet-stream"  # byte categories only
+    size: int = 0  # byte categories only
+    path: str = ""  # byte categories only: sink-relative location, assigned by the sink on save
 
 
 class Task(BaseModel):
@@ -124,8 +114,7 @@ class Project(BaseModel):
     instructions: str = ""
     links: list[Link] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
-    assets: list[Asset] = Field(default_factory=list)
-    tools: list[Tool] = Field(default_factory=list)
+    assets: list[Asset] = Field(default_factory=list)  # every category: docs, tools, and byte files
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)
     # OKF provenance (§5.2): how the content was produced.

@@ -70,7 +70,7 @@ you're piped? Just set it - it's harmless when you already are.
 
 ## Deleting: always pass `--confirm`
 
-Every destructive command (`project delete`, `workspace delete`, and `note/link/doc/asset/task/tool rm`)
+Every destructive command (`delete` on any node, e.g. `project delete`, `note delete`, `tool delete`)
 prompts for confirmation and **aborts on non-interactive stdin** - so without the flag your call
 fails and deletes nothing. Always pass **`--confirm`** to delete non-interactively, e.g.
 `totebag -p prj_xxx project delete --confirm`.
@@ -101,8 +101,8 @@ command, or switch the default with `totebag workspace use <wsp_id>`; create one
 
 There are three ways to read a project - pick by how much you need:
 
-- **`totebag project context`** - the **restore blob**: description, instructions, **tools/skills to
-  restore**, notes, links, every doc, the asset inventory, and the **open task list**, assembled
+- **`totebag project context`** - the **restore blob**: description, instructions, **tools/skills**,
+  notes, links, every doc, the asset inventory, and the **open task list**, assembled
   into one markdown document. This is what you read to rehydrate a project. Start here.
 - **`totebag project get`** - the project's **own record** (fields + instructions) as terse text or
   JSON. It does not walk every child's content. Use it when you want the project metadata, not the
@@ -125,16 +125,19 @@ If you don't know which project, `totebag search "<keywords>"` locates hits acro
 projects and tells you which `prj_…` they live in. Target a one-off project without changing the
 default by prefixing any command with `-p <prj_id>`.
 
-## Restore the project's tools before working
+## The project's tools and skills
 
-The context blob lists the tools and skills this project depends on, each with a `restore:`
-command. Before starting, check whether each is available; if not, run its restore step. Add
-tools as you discover the project needs them:
+The context blob lists the tools and skills this project depends on. Add tools as you discover the
+project needs them - a tool is just an asset with a tool/skill category, so it can be a named
+dependency or carry an uploaded file (a script, a binary) you pull back later. `tool` mirrors
+`asset`:
 
 ```bash
-totebag tool add --name "stripe-cli" --description "calls the Stripe API" \
-  --type tool --restore "brew install stripe"
-totebag tool list
+totebag tool add --name "stripe-cli" --description "calls the Stripe API" --type tool
+totebag tool add ./scripts/deploy.sh --name deploy --description "one-shot deploy" --type skill
+totebag tool list            # one summary row per tool; [file] marks tools carrying a file
+totebag tool get tol_xxx     # the full detail for one tool
+totebag tool download tol_xxx ./deploy.sh
 ```
 
 ## Park future work on the task list
@@ -150,7 +153,7 @@ moment it's done** so the list only ever shows real, still-open future work:
 totebag task add    --title "Wire webhooks" --description "handle Stripe retries"
 totebag task attach tsk_yyy ./payload.json --description "sample webhook payload"
 totebag task list                                 # what's left to do
-totebag task rm     tsk_yyy --confirm             # drop it once done
+totebag task delete tsk_yyy --confirm             # drop it once done
 ```
 
 Each task keeps its own attachments, so a task carries its own working files with it.
@@ -190,13 +193,13 @@ totebag list get    "$LST"                               # metadata + entries
 totebag list list                                        # all lists in the project
 totebag list export "$LST"                               # CSV to stdout (columns = union of all keys)
 totebag list export "$LST" --output prospects.csv        # or to a file
-totebag list rm-entry "$LST" 0 --confirm                 # drop one entry by 0-based index
-totebag list rm     "$LST" --confirm                     # delete the whole list
+totebag list delete-entry "$LST" 0 --confirm             # drop one entry by 0-based index
+totebag list delete "$LST" --confirm                     # delete the whole list
 ```
 
-Entries have no id, so `rm-entry` deletes by **0-based index** (the position shown in `list get`).
+Entries have no id, so `delete-entry` removes by **0-based index** (the position shown in `list get`).
 It prints the removed entry as a JSONL line, so you can add it straight back:
-`totebag list rm-entry "$LST" 2 --confirm | totebag list add "$LST" --stdin`.
+`totebag list delete-entry "$LST" 2 --confirm | totebag list add "$LST" --stdin`.
 
 ## Editing
 
@@ -210,7 +213,7 @@ totebag project update --description "One-paragraph what/why of this project."
 totebag doc edit doc_yyy --description "What this document covers."     # description only
 totebag doc edit doc_yyy --description "Revised: now covers X" --stdin < revised.md
 totebag doc edit doc_yyy --stdin < typo-fix.md           # body-only; description unchanged
-totebag note list ; totebag note rm 3 --confirm
+totebag note list ; totebag note delete 3 --confirm
 ```
 
 ## Conventions
@@ -221,7 +224,7 @@ totebag note list ; totebag note rm 3 --confirm
 - Write knowledge that outlives the session (decisions, gotchas, where things live), not
   transient chatter.
 - Keep the task list honest: it's for future work you're deferring, not work in progress; add a
-  task to postpone something, remove it (`task rm`) when done.
+  task to postpone something, remove it (`task delete`) when done.
 - IDs are prefixed: `wsp_` workspace, `prj_` project, `doc_` doc, `lnk_` link, `ast_` asset, `tsk_` task, `tol_` tool.
 
 ## Keeping this skill current
