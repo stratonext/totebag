@@ -7,7 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `task get <id>` (full task detail: body + attachment index) and
+  `task download <task_id> <asset_id> <dest>` (pull a task's attachment back out) — closing the gaps
+  in the task command surface, now consistent with the other item types.
+
 ### Changed
+
+- Renamed every destructive subcommand to `delete` for consistency (`note/link/doc/list/asset/task/
+  tool delete`; `list rm-entry` → `list delete-entry`); `project`/`workspace` already used `delete`.
+- CLI output: color + aligned columns on a human TTY, plain when piped/agent/`--json`; `doc get` and
+  `project context` render markdown (code blocks) via rich. See `docs/cli-output-conventions.md`.
 
 - **Unified docs, tools/skills, and files into one `Asset` concept** (breaking on-disk format).
   Documents and tools are now `Asset`s distinguished by `AssetCategory`; `Doc`, `Tool`, and
