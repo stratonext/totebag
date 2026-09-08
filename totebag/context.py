@@ -1,11 +1,38 @@
-"""Assemble a project's knowledge into one markdown blob - the thing an agent reads to
-rehydrate ("restore knowledge"). Summary-first, then the full contents.
+"""Assemble a project's (or workspace's) knowledge into one markdown blob - the thing an agent reads
+to rehydrate ("restore knowledge"). Summary-first, then the full contents.
 """
 
 from __future__ import annotations
 
-from .models import BYTES_CATEGORIES, TOOL_CATEGORIES, AssetCategory, Project
+from .models import BYTES_CATEGORIES, TOOL_CATEGORIES, AssetCategory, Project, Workspace
 from .store import Store
+
+
+def build_workspace_context(store: Store, workspace: Workspace) -> str:
+    """The workspace-level restore blob for a department agent: its charter plus a cheap index of
+    its workstream projects. The agent drills into a workstream with `project context`."""
+    lines: list[str] = [f"# Department: {workspace.name}  ({workspace.id})"]
+    if workspace.description:
+        lines.append(f"\n{workspace.description}")
+
+    if workspace.instructions:
+        lines.append("\n## Charter\n")
+        lines.append(workspace.instructions)
+
+    view = store.summarize_workspace(workspace.id, recursive=True)
+    projects = view.get("projects", [])
+    lines.append("\n## Workstreams (projects)\n")
+    if projects:
+        for p in projects:
+            line = f"- **{p.get('name') or ''}** ({p['id']})"
+            if p.get("description"):
+                line += f" - {p['description']}"
+            lines.append(line)
+        lines.append("\n_Load a workstream with `totebag -p <prj_id> project context`._")
+    else:
+        lines.append("_No projects yet._")
+
+    return "\n".join(lines) + "\n"
 
 
 def build_context(store: Store, project: Project) -> str:

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Workspace charter.** A workspace now carries `instructions` (free-form markdown), symmetric with a
+  project's, persisted as the `workspace.md` body. New `totebag workspace context` emits a workspace
+  restore blob (charter + project index), and `workspace create`/`update` accept `--file`/`--stdin` to
+  set it. This lets a workspace model a "department" whose persona travels with the store — see the
+  [personas plugin](plugins/personas/README.md), which projects charters into native subagents.
+  Also `docs/cli-output-conventions.md`.
+
 ### Changed
 
 - **Unified docs, tools/skills, and files into one `Asset` concept** (breaking on-disk format).

@@ -17,7 +17,7 @@ from typing import Any
 import typer
 
 from . import __version__
-from .context import build_context
+from .context import build_context, build_workspace_context
 from .models import BYTES_CATEGORIES, TOOL_CATEGORIES, AssetCategory, LinkType, ProjectStatus, ProjectType
 from .store import ProjectNotFound, Store, WorkspaceNotFound, entries_to_csv
 
@@ -341,9 +341,12 @@ def workspace_create(
     ctx: typer.Context,
     name: str = typer.Option(..., "--name"),
     description: str = typer.Option(..., "--description", help="Required: what this workspace is for."),
+    file: str | None = typer.Option(None, "--file", help="Read the charter (markdown) from this file."),
+    stdin: bool = typer.Option(False, "--stdin", help="Read the charter (markdown) from stdin."),
 ) -> None:
-    """Create a new workspace and print its id."""
-    typer.echo(_store(ctx).create_workspace(name, description).id)
+    """Create a new workspace and print its id. Optionally set its charter from --file/--stdin."""
+    charter = _read_body(file, stdin) if (file or stdin) else ""
+    typer.echo(_store(ctx).create_workspace(name, description, charter).id)
 
 
 @workspace_app.command("list")
@@ -398,13 +401,29 @@ def workspace_update(
     ctx: typer.Context,
     name: str | None = typer.Option(None, "--name"),
     description: str | None = typer.Option(None, "--description"),
+    file: str | None = typer.Option(None, "--file", help="Replace the charter from this markdown file."),
+    stdin: bool = typer.Option(False, "--stdin", help="Replace the charter from stdin (markdown)."),
 ) -> None:
+    """Update a workspace's fields and/or its charter (from --file/--stdin)."""
+    charter = _read_body(file, stdin) if (file or stdin) else None  # None ⇒ charter unchanged
     wid = _workspace(ctx)
     try:
-        _store(ctx).update_workspace(wid, name, description)
+        _store(ctx).update_workspace(wid, name, description, charter)
     except WorkspaceNotFound:
         _fail(f"No such workspace: {wid}")
     typer.echo("ok")
+
+
+@workspace_app.command("context")
+def workspace_context(ctx: typer.Context) -> None:
+    """Emit the department restore blob for a workspace: its charter + workstream (project) index."""
+    store = _store(ctx)
+    wid = _workspace(ctx)
+    try:
+        ws = store.get_workspace(wid)
+    except WorkspaceNotFound:
+        _fail(f"No such workspace: {wid}")
+    _render_markdown(build_workspace_context(store, ws))
 
 
 @workspace_app.command("use")

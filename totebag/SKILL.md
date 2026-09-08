@@ -119,6 +119,13 @@ totebag project   get --brief --recursive           # active project + each chil
 totebag workspace get --brief --recursive           # active workspace + each project's description
 ```
 
+A **workspace also carries a charter** (`instructions`) - free-form markdown describing how an agent
+scoped to that workspace should behave (its role, scope, rules). Set it with
+`totebag -w <wsp> workspace update --stdin < charter.md` (or `--file`). **`totebag workspace context`**
+emits the workspace restore blob: the charter plus a cheap index of its projects (workstreams). This
+lets a workspace model a "department" whose behavior travels with the store - restore it, adopt the
+charter, then drill into a workstream with `project context`.
+
 Rule of thumb: **`context` to work, `--brief --recursive` to survey, `get` for the record.**
 
 If you don't know which project, `totebag search "<keywords>"` locates hits across all

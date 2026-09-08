@@ -300,7 +300,8 @@ class OKFSink(Sink):
     def save_workspace(self, workspace: Workspace) -> None:
         wsdir = self._workspace_dir(workspace.id)
         # workspace.md carries the container metadata plus the optional OKF format marker
-        # (okf_version is MAY in OKF v0.2; no separate index.md is written).
+        # (okf_version is MAY in OKF v0.2; no separate index.md is written). The charter
+        # (instructions) lives in the body, mirroring how project.md carries project instructions.
         meta = {
             "id": workspace.id,
             "name": workspace.name,
@@ -309,18 +310,19 @@ class OKFSink(Sink):
             "created_at": workspace.created_at.isoformat(),
             "okf_version": OKF_VERSION,
         }
-        self._write_text(posixpath.join(wsdir, "workspace.md"), _dump_concept(meta, f"# {workspace.name}\n"))
+        self._write_text(posixpath.join(wsdir, "workspace.md"), _dump_concept(meta, workspace.instructions))
         self.fs.makedirs(posixpath.join(wsdir, "projects"), exist_ok=True)
 
     def load_workspace(self, wid: str) -> Workspace:
         path = posixpath.join(self._workspace_dir(wid), "workspace.md")
         if not self.fs.exists(path):
             raise WorkspaceNotFound(wid)
-        meta, _ = _load_concept(self._read_text(path))
+        meta, body = _load_concept(self._read_text(path))
         data = {
             "id": meta.get("id", wid),
             "name": meta.get("name", wid),
             "description": meta.get("description") or "",
+            "instructions": body,  # the charter lives in the body
             "default_project": meta.get("default_project"),
         }
         if meta.get("created_at"):

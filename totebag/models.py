@@ -122,10 +122,15 @@ class Project(BaseModel):
 
 
 class Workspace(BaseModel):
-    """A top-level container of projects. A store may hold many; one is active at a time."""
+    """A top-level container of projects. A store may hold many; one is active at a time.
+
+    `instructions` is the workspace's charter - free-form markdown describing how an agent scoped to
+    this workspace should behave (role, scope, rules). Symmetric with `Project.instructions`; it lets
+    a workspace model a "department" whose persona travels with the store."""
 
     id: str
     name: str = "workspace"
     description: str = ""
+    instructions: str = ""  # the workspace charter (department persona/scope/rules), markdown body
     default_project: str | None = None  # the workspace's default project id, used when none is given
     created_at: datetime = Field(default_factory=_now)

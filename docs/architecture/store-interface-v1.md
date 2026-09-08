@@ -13,14 +13,17 @@ implement every operation below and MUST NOT expose operations outside this set.
 
 ## 1. Workspace
 
-A workspace is the top-level container. It holds many projects. A store MAY hold many workspaces.
+A workspace is the top-level container. It holds many projects. A store MAY hold many workspaces. A
+workspace carries a **charter** (`instructions`): free-form markdown describing how an agent scoped to
+it should behave, so a workspace can model a department whose persona travels with the store.
 
 | Operation | Description |
 |---|---|
-| Create | Create a workspace. |
-| Get | Retrieve a workspace by identifier. |
+| Create | Create a workspace (optionally with a charter). |
+| Get | Retrieve a workspace by identifier (including its charter). |
 | List | List all workspaces. |
-| Update | Update a workspace's fields. |
+| Update | Update a workspace's fields and/or its charter. |
+| Context | Assemble the workspace restore blob: its charter plus an index of its projects. |
 | Delete | Delete a workspace and everything it contains. |
 
 ## 2. Projects

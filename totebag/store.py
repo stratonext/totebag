@@ -117,9 +117,11 @@ class Store:
         self.sink.set_default_workspace(workspace.id)
         return workspace
 
-    def create_workspace(self, name: str, description: str = "") -> Workspace:
+    def create_workspace(self, name: str, description: str = "", instructions: str = "") -> Workspace:
         _require_description(description, "workspace")
-        workspace = Workspace(id=generate_id("wsp"), name=name, description=description)
+        workspace = Workspace(
+            id=generate_id("wsp"), name=name, description=description, instructions=instructions
+        )
         self.sink.save_workspace(workspace)
         return workspace
 
@@ -130,13 +132,19 @@ class Store:
         return self.sink.list_workspaces()
 
     def update_workspace(
-        self, wid: str, name: str | None = None, description: str | None = None
+        self,
+        wid: str,
+        name: str | None = None,
+        description: str | None = None,
+        instructions: str | None = None,
     ) -> Workspace:
         workspace = self.sink.load_workspace(wid)
         if name is not None:
             workspace.name = name
         if description is not None:
             workspace.description = description
+        if instructions is not None:
+            workspace.instructions = instructions
         self.sink.save_workspace(workspace)
         return workspace
 

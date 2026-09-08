@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from totebag.context import build_context
+from totebag.context import build_context, build_workspace_context
 from totebag.models import BYTES_CATEGORIES, AssetCategory, LinkType, ProjectStatus
 from totebag.store import DescriptionRequired, Store
 
@@ -106,6 +106,31 @@ def test_tasks_and_tools(tmp_path: Path) -> None:
 
     blob = build_context(s2, s2.get_project(pid))
     assert "stripe-cli" in blob and "Tools & skills" in blob
+
+
+def test_workspace_charter_and_context(tmp_path: Path) -> None:
+    """A workspace carries a charter (instructions) that round-trips; workspace context assembles
+    the charter plus a workstream (project) index - the department agent's restore blob."""
+    root = f"file://{tmp_path}/totebag"
+    s = Store(root)
+    s.init_workspace()
+    ws = s.create_workspace(
+        "marketing",
+        description="GTM department",
+        instructions="# Marketing Charter\nYou own GTM. Escalate any spend over $5k.",
+    )
+    # a workstream project under this department
+    Store(root, workspace=ws.id).create_project("Q3 GTM", description="Q3 go-to-market plan")
+
+    # charter round-trips through the sink
+    ws2 = Store(root).get_workspace(ws.id)
+    assert "Escalate any spend over $5k" in ws2.instructions
+
+    blob = build_workspace_context(Store(root), ws2)
+    assert "# Department: marketing" in blob
+    assert "Marketing Charter" in blob          # the charter
+    assert "## Workstreams" in blob
+    assert "Q3 go-to-market plan" in blob        # the project index
 
 
 def test_workspaces_are_isolated(tmp_path: Path) -> None:
