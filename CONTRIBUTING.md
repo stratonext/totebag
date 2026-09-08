@@ -119,6 +119,28 @@ distributions, publishes them to the right index, and creates a GitHub Release w
 matching `CHANGELOG.md` section (falling back to auto-generated notes if none is found). Pre-release
 tags are marked as pre-releases on GitHub.
 
+### Verify a TestPyPI build
+
+TestPyPI hosts only `totebag`, not its dependencies (`fsspec`, `pydantic`, ...), so the install
+must fall through to real PyPI for those. Because a few deps also exist on TestPyPI, uv needs
+`--index-strategy unsafe-best-match` to pick the newest version across indexes:
+
+```bash
+uv tool install \
+  --index https://test.pypi.org/simple/ \
+  --index https://pypi.org/simple/ \
+  --index-strategy unsafe-best-match \
+  totebag --prerelease=allow
+totebag --version   # should print the rc you published
+```
+
+pip/pipx equivalent:
+
+```bash
+pipx install --pip-args="--index-url https://test.pypi.org/simple/ \
+  --extra-index-url https://pypi.org/simple/ --pre" totebag
+```
+
 **One-time setup** (repository maintainer) — the workflow authenticates over OIDC, so no API tokens
 are stored:
 
