@@ -1,6 +1,6 @@
 [project]
 name = "totebag"
-version = "0.1.0"
+version = "0.1.0rc1"
 description = "Portable, vendor-neutral project-knowledge store any AI Agent agent can restore over a CLI."
 readme = "README.md"
 requires-python = ">=3.11"
