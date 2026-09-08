@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-08
+
+### Changed
+
+- Simplified the README down to the core loop (create a project with a description, add a
+  task/skill, dump `project context`) - refreshes the PyPI project description. No package code
+  changes.
+- Releases now publish only from a tag merged into `main`, and each publish waits for a manual
+  environment approval.
+
 ## [0.1.0] - 2026-09-08
 
 Initial release.
@@ -40,4 +50,5 @@ Initial release.
 - Substring `search` across a project or workspace.
 - `totebag --skill` prints the bundled agent guide; `--version` prints the version.
 
+[0.1.1]: https://github.com/stratonext/totebag/releases/tag/v0.1.1
 [0.1.0]: https://github.com/stratonext/totebag/releases/tag/v0.1.0
