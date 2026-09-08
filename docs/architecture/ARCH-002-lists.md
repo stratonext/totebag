@@ -21,9 +21,6 @@ that other tools can consume as CSV. The store does not enforce a schema on entr
 keeps keys consistent (REQ-020). Entries are appended in batches, never one at a time (REQ-019),
 and a list's description doubles as its required summary (REQ-013, REQ-017).
 
-The feature introduces no new component. It is realized entirely by the existing CLI, Store,
-Domain Model, Sink, and OKF Sink, so the component registry is unchanged.
-
 ## Components
 
 The Domain Model gains a list entity carrying an identifier, a name, a required description, and an

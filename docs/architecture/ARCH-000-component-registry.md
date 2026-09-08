@@ -19,7 +19,7 @@ these fields.
 | Component | Type | Technology | Responsibility |
 |---|---|---|---|
 | CLI | Command layer | Typer | Parse subcommands, enforce required inputs, format terse or JSON output. |
-| Domain Model | Data model | Pydantic v2 | Typed entities (Project, Doc, Note, Link, Asset, Tool, Task) and their validation, including the required-summary rule. |
+| Domain Model | Data model | Pydantic v2 | Typed entities (Project, Note, Link, Asset, Task) and their validation, including the required-summary rule. One Asset covers documents, tools/skills, and byte files, distinguished by category. |
 | Store | Application core | Python | Orchestrate and validate every operation and dispatch it to the active sink through the Sink interface. Holds no storage-representation knowledge. |
 | Sink | Storage interface | Abstract contract | The versioned set of store operations for one destination. Concrete sinks implement it and are interchangeable behind it. |
 | OKF Sink | Concrete sink | fsspec + Markdown/YAML | Default sink. Persist items as an OKF v0.2 bundle over an fsspec filesystem (local disk, S3, GCS). |

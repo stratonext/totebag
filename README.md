@@ -26,10 +26,11 @@ $TOTEBAG_ROOT/
   workspaces/wsp_abc/
     workspace.md              # workspace metadata + default project
     projects/prj_abc/
-      project.md              # description, instructions; notes/links/tools inline in front-matter
-      docs/doc_x.md           # markdown + front-matter (title, description)
+      project.md              # description, instructions; notes/links inline in front-matter
+      docs/doc_x.md           # a document asset: editable markdown + front-matter
       lists/lst_v.md          # schema-free entries (JSONL body), exportable as CSV
-      assets/ast_y/report.pdf # a stored file, alongside its asset.md metadata
+      assets/ast_y/report.pdf # a byte asset: a stored file, alongside its asset.md metadata
+      assets/tol_w/asset.md   # a tool/skill: an asset (category=tool, file optional)
       tasks/tsk_z/task.md     # deferred work to pick up later, in its own folder with attachments
 ```
 
@@ -47,7 +48,7 @@ One **workspace** → many **projects**. Each project has:
 | **links** | URLs (typed) | - |
 | **lists** | named collections of schema-free entries, exportable as CSV | required |
 | **assets** | arbitrary files | required |
-| **tools** | tools/skills the project needs, with a restore command | required |
+| **tools** | tools/skills the project needs (an asset by category; file optional) | required |
 | **tasks** | **future** work to do later - deferred/postponed items, one per folder with attachments | required |
 
 **Tasks are for the future, not the present.** A task marks something to pick up *later* - a
@@ -77,9 +78,9 @@ totebag note add   "Webhooks retry 3x; idempotency key required."
 totebag link add   --url https://stripe.com/docs --name "Stripe docs" --type documentation
 totebag doc  add   --title "On-call runbook" --description "What to do at 3am" --stdin < runbook.md
 totebag asset add  ./arch.pdf --description "Service topology v2"
-totebag tool add   --name stripe-cli --description "calls the Stripe API" --restore "brew install stripe"
+totebag tool add   --name stripe-cli --description "calls the Stripe API" --type tool
 TID=$(totebag task add --title "Wire webhooks" --description "handle Stripe retries")
-totebag task rm    $TID --confirm   # drop it from the list once done
+totebag task delete $TID --confirm   # drop it from the list once done
 
 totebag project context            # <- the blob any AI Agent reads to restore knowledge
 totebag search "idempotency"

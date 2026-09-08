@@ -4,7 +4,7 @@ rehydrate ("restore knowledge"). Summary-first, then the full contents.
 
 from __future__ import annotations
 
-from .models import Project
+from .models import BYTES_CATEGORIES, TOOL_CATEGORIES, AssetCategory, Project
 from .store import Store
 
 
@@ -18,13 +18,14 @@ def build_context(store: Store, project: Project) -> str:
         lines.append("\n## Instructions\n")
         lines.append(project.instructions)
 
-    if project.tools:
+    tools = [a for a in project.assets if a.category in TOOL_CATEGORIES]
+    if tools:
         lines.append("\n## Tools & skills\n")
-        lines.append("_Restore any that aren't already available before starting work._")
-        for tool in project.tools:
-            line = f"- **{tool.name}** (_{tool.kind.value}_) - {tool.description}"
-            if tool.restore:
-                line += f"\n  - restore: `{tool.restore}`"
+        lines.append("_Dependencies this project needs; download any with an attached file if missing._")
+        for tool in tools:
+            line = f"- **{tool.name}** (_{tool.category.value}_) - {tool.description}"
+            if tool.path:
+                line += "  [file attached]"
             lines.append(line)
 
     if project.notes:
@@ -39,19 +40,20 @@ def build_context(store: Store, project: Project) -> str:
                 line += f": {link.description}"
             lines.append(line)
 
-    docs = store.list_docs(project.id)
+    docs = [a for a in project.assets if a.category == AssetCategory.document]
     if docs:
         lines.append("\n## Docs\n")
         for doc in docs:
-            lines.append(f"\n### {doc.title}  ({doc.id})")
+            lines.append(f"\n### {doc.name}  ({doc.id})")
             if doc.description:
                 lines.append(f"_{doc.description}_")
             lines.append("")
             lines.append(doc.body)
 
-    if project.assets:
+    files = [a for a in project.assets if a.category in BYTES_CATEGORIES]
+    if files:
         lines.append("\n## Assets\n")
-        for asset in project.assets:
+        for asset in files:
             line = f"- **{asset.name}** ({asset.id}, {asset.media_type}, {asset.size} bytes)"
             if asset.description:
                 line += f" - {asset.description}"
