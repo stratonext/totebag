@@ -1,4 +1,4 @@
-# personas — a totebag plugin
+# personas — a totebag plugin (EXPERIMENTAL)
 
 Turn [totebag](../../README.md) workspaces into scoped **persona agents**. Each workspace's
 **charter** lives in totebag and is projected into a native Claude Code subagent — a role/persona (a
