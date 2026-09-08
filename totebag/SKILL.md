@@ -152,7 +152,9 @@ moment it's done** so the list only ever shows real, still-open future work:
 ```bash
 totebag task add    --title "Wire webhooks" --description "handle Stripe retries"
 totebag task attach tsk_yyy ./payload.json --description "sample webhook payload"
-totebag task list                                 # what's left to do
+totebag task list                                 # what's left to do (title + description)
+totebag task get    tsk_yyy                        # one task in full: its detail (body) + attachments
+totebag task download tsk_yyy ast_zzz ./payload.json   # pull an attachment back out (id from `task get`)
 totebag task delete tsk_yyy --confirm             # drop it once done
 ```
 

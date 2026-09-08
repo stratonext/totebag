@@ -98,9 +98,10 @@ work in progress. A task SHOULD be removed once completed, though this is not ma
 | Operation | Description |
 |---|---|
 | Add | Add a task. |
-| Get | Retrieve a task. |
+| Get | Retrieve a task (its detail and attachment index). |
 | List | List a project's tasks. |
 | Attach | Attach an asset to a task. |
+| Download | Read the bytes of one of a task's attachments. |
 | Delete | Delete a task. |
 
 ## 8. Search

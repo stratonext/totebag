@@ -129,6 +129,8 @@ class Sink(ABC):
     def delete_task(self, pid: str, tid: str) -> None: ...
     @abstractmethod
     def save_task_asset(self, pid: str, task: Task, asset: Asset, filename: str, data: bytes) -> None: ...
+    @abstractmethod
+    def load_task_asset_bytes(self, pid: str, tid: str, asset_id: str) -> bytes: ...
 
 
 def _normalize_root(root: str) -> str:
@@ -698,6 +700,13 @@ class OKFSink(Sink):
         asset.path = rel
         task.assets.append(asset)
         self.save_task(pid, task)
+
+    def load_task_asset_bytes(self, pid: str, tid: str, asset_id: str) -> bytes:
+        task = self.load_task(pid, tid)  # raises FileNotFoundError if the task is gone
+        asset = next((a for a in task.assets if a.id == asset_id), None)
+        if asset is None:
+            raise FileNotFoundError(asset_id)
+        return self._read_bytes(posixpath.join(self._task_dir(pid, tid), asset.path))
 
     def delete_task(self, pid: str, tid: str) -> None:
         d = self._task_dir(pid, tid)

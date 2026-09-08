@@ -923,6 +923,28 @@ def task_list(ctx: typer.Context) -> None:
         typer.echo(f"{_color(task.id, dim=True)}  {_color(f'{task.title:{name_w}}', bold=True)}  - {desc}")
 
 
+@task_app.command("get")
+def task_get(ctx: typer.Context, task_id: str) -> None:
+    """Show one task in full: its detail (body) and any attachments."""
+    try:
+        task = _store(ctx).get_task(_project(ctx), task_id)
+    except FileNotFoundError:
+        _fail(f"No such task: {task_id}")
+    if _OUT.json:
+        _print_json(task)
+        return
+    typer.echo(f"{_color(task.id, dim=True)}  {_color(task.title, bold=True)}")
+    if task.description:
+        typer.echo(task.description)
+    if task.assets:
+        typer.echo(_color(f"attachments ({len(task.assets)}):", fg="cyan"))
+        for a in task.assets:
+            typer.echo(f"  {_color(a.id, dim=True)}  {a.name} ({a.media_type}, {a.size} bytes)")
+    if task.body:
+        typer.echo("")
+        _render_markdown(task.body)
+
+
 @task_app.command("attach")
 def task_attach(
     ctx: typer.Context,
@@ -937,6 +959,18 @@ def task_attach(
     except (FileNotFoundError, ValueError) as e:
         _fail(str(e))
     typer.echo(asset.id)
+
+
+@task_app.command("download")
+def task_download(ctx: typer.Context, task_id: str, asset_id: str, dest: str) -> None:
+    """Download one of a task's attachments (its id is shown by `task get`) to a local path."""
+    try:
+        data = _store(ctx).read_task_asset_bytes(_project(ctx), task_id, asset_id)
+    except FileNotFoundError:
+        _fail(f"No such task or attachment: {task_id}/{asset_id}")
+    with open(dest, "wb") as f:
+        f.write(data)
+    typer.echo(dest)
 
 
 @task_app.command("delete")

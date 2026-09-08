@@ -99,6 +99,8 @@ def test_tasks_and_tools(tmp_path: Path) -> None:
     tasks = s2.list_tasks(pid)
     assert len(tasks) == 1 and tasks[0].title == "Wire webhooks"
     assert tasks[0].assets[0].description == "sample webhook payload"
+    # a task attachment can be downloaded back out by id
+    assert s2.read_task_asset_bytes(pid, task.id, tasks[0].assets[0].id) == b'{"id": 1}'
 
     # removing a task drops it from the list
     s2.remove_task(pid, task.id)

@@ -412,6 +412,9 @@ class Store:
         self.sink.save_task_asset(pid, task, asset, filename, data)
         return asset
 
+    def read_task_asset_bytes(self, pid: str, tid: str, asset_id: str) -> bytes:
+        return self.sink.load_task_asset_bytes(pid, tid, asset_id)
+
     def remove_task(self, pid: str, tid: str) -> None:
         self.sink.delete_task(pid, tid)
 
